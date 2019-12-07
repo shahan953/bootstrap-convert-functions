@@ -1,6 +1,6 @@
 # Required Scripts
 
-`npm install firebase-tools`
+`npm install firebase-tools -g`
 
 # Run Application Locally
 
