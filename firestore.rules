@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // match /{document=**} {
+    //   allow read, write: if request.auth.uid != null;
+    //   match /admin/{userId == **}
+    // }
+    match /users/{userId} {
+      allow read: if isOwer(userId);
+      allow write: if isOwer(userId);
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+    match /projects/{projectId} {
+      allow read: if isProjectOwner(projectId);
+      allow write: if isProjectOwner(projectId);
+      allow update: if isProjectOwner(projectId);
+      allow delete: if isProjectOwner(projectId);
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /settings/{doc=**} {
+      allow read: if isAdmin() || isModerator();
+      allow write: if isAdmin() || isModerator();
+    }
+
+    match /admin/{doc=**} {
+      allow read: if isAdmin() || isModerator();
+      allow write: if isAdmin() || isModerator();
+    }
+
+    function isProjectOwner(projectId) {
+      return get(/databases/$(database)/documents/projects/$(projectId)).data.uid == request.auth.uid;
+    }
+
+    function isOwer(userId) {
+      return request.auth.uid == userId
+    }
+    function isModerator() {
+      return request.auth.token.moderator
+    }
+    function isAdmin() {
+      return request.auth.token.admin
+    }
+  }
+}

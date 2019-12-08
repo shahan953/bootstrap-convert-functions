@@ -3,8 +3,8 @@ const admin = require("firebase-admin");
 const serviceAccount = require("../service-account.json");
 const express = require("express");
 const app = express();
-const bodyParser = require("body-parser");
-const cors = require("cors")({ origin: true });
+const cors = require('cors');
+const bodyParser = require('body-parser');
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -55,7 +55,7 @@ exports.createAdmin = functions.https.onCall(async (data, ctx) => {
       message: "Unauthorized"
     };
   }
-  if (!ctx.auth.token.admin || !ctx.auth.token.moderator) {
+  if (!ctx.auth.token.admin) {
     return {
       success: false,
       message: "Permission denied"
@@ -110,35 +110,43 @@ exports.createAdmin = functions.https.onCall(async (data, ctx) => {
 });
 
 exports.getAdmins = functions.https.onCall(async (data, ctx) => {
-  if (ctx.auth.token && ctx.auth.token.admin) {
-    let result = await admin.auth().listUsers(20);
-
-    let admins = [];
-    let moderators = [];
-    result.users.forEach(user => {
-      const usr = user.toJSON();
-      if (usr.customClaims) {
-        if (usr.customClaims.admin) {
-          return admins.push(usr);
-        } else if (usr.customClaims.moderator) {
-          return moderators.push(usr);
-        }
-      }
-    });
-    return {
-      success: true,
-      result: {
-        admins,
-        moderators
-      },
-      nextPage: result.pageToken
-    };
-  } else {
+  if (!ctx.auth) {
     return {
       success: false,
-      message: "Permission denined"
+      message: "Unauthorized"
     };
   }
+  if (!ctx.auth.token.admin && !ctx.auth.token.moderator) {
+    return {
+      success: false,
+      message: "Permission denied",
+      line: 121,
+      token: ctx.auth.token
+    };
+  }
+  let result = await admin.auth().listUsers(20);
+
+  let admins = [];
+  let moderators = [];
+  result.users.forEach(user => {
+    const usr = user.toJSON();
+    if (usr.customClaims) {
+      if (usr.customClaims.admin) {
+        return admins.push(usr);
+      } else if (usr.customClaims.moderator) {
+        return moderators.push(usr);
+      }
+    }
+    return usr;
+  });
+  return {
+    success: true,
+    result: {
+      admins,
+      moderators
+    },
+    nextPage: result.pageToken
+  };
 });
 
 exports.deleteUser = functions.https.onCall(async (data, ctx) => {
@@ -168,50 +176,114 @@ exports.deleteUser = functions.https.onCall(async (data, ctx) => {
   }
 });
 
-// app.use(cors);
-// app.use(bodyParser.json());
-// app.use(bodyParser.urlencoded({ extended: true }));
-// app.get("/hello", (req, res) => {
-//   res.send(`Hello`);
-// });
+exports.updateProfile = functions.https.onCall(async (data, ctx) => {
+  if (ctx.auth.token.admin || ctx.auth.token.moderator) {
+    try {
+      const record = await admin.auth().updateUser(ctx.auth.uid, data);
 
-// app.post("/create-admin", async (req, res) => {
-//   // console.log(req.headers.autorization);
-//   if (req.method !== "POST") {
-//     return res.status(404).json({
-//       message: `${req.method} method not allowed`
-//     });
-//   }
-//   try {
-//     const record = await admin.auth().createUser({
-//       email: req.body.email,
-//       emailVerified: true,
-//       phoneNumber: req.body.phone,
-//       password: req.body.password,
-//       displayName: req.body.displayName
-//     });
-//     await admin.auth().setCustomUserClaims(record.uid, { role: "admin" });
-//     await admin
-//       .firestore()
-//       .collection("admin")
-//       .doc(record.uid)
-//       .set({
-//         email: req.body.email,
-//         phoneNumber: req.body.phone,
-//         displayName: req.body.displayName,
-//         role: "admin"
-//       });
-//     return res.status(201).json({
-//       success: true,
-//       record
-//     });
-//   } catch (err) {
-//     return res.status(422).json({
-//       success: false,
-//       message: err.message,
-//       error: err
-//     });
-//   }
-// });
+      return {
+        success: true,
+        message: "User successfully updated",
+        record
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.message
+      };
+    }
+  } else {
+    return {
+      success: false,
+      message: "Permission denined"
+    };
+  }
+});
+
+exports.updateContact = functions.https.onCall(async (data, ctx) => {
+  if (ctx.auth.token.admin || ctx.auth.token.moderator) {
+    try {
+      const record = await admin
+        .firestore()
+        .collection("admin")
+        .doc(ctx.auth.uid)
+        .update(data);
+
+      return {
+        success: true,
+        message: "User successfully updated",
+        record
+      };
+    } catch (err) {
+      if (err.code === 5) {
+        // No data associated with this id. So create new one
+        try {
+          Object.assign(data, {
+            email: ctx.auth.token.email,
+            id: ctx.auth.uid
+          });
+          const record = await admin
+            .firestore()
+            .collection("admin")
+            .doc(ctx.auth.uid)
+            .set(data);
+          return {
+            success: true,
+            message: "User successfully updated",
+            record
+          };
+        } catch (error) {
+          return {
+            success: false,
+            message: error.message,
+            error
+          };
+        }
+      } else {
+        return {
+          success: false,
+          message: err.message,
+          err
+        };
+      }
+    }
+  } else {
+    return {
+      success: false,
+      message: "Permission denined"
+    };
+  }
+});
+
+
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.get("/helloworld", (req, res) => {
+  console.log("hello");
+  
+  res.json({
+    ins: JSON.parse(admin.getToken())
+  });
+});
+
+exports.testApi = functions.https.onCall(async (data, ctx) => {
+  // console.log(req.headers.autorization);
+  // if (req.method !== "POST") {
+  //   return res.status(404).json({
+  //     message: `${req.method} method not allowed`
+  //   });
+  // }
+ try {
+    return {
+      message: "OK",
+      auth: ctx.auth.token
+    };
+ } catch (err) {
+   return {
+     message: err.message
+   }
+ }
+});
 
 exports.api = functions.https.onRequest(app);
