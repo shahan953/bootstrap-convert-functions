@@ -149,7 +149,7 @@ exports.getAdmins = functions.https.onCall(async (data, ctx) => {
   };
 });
 
-exports.deleteUser = functions.https.onCall(async (data, ctx) => {
+exports.deleteAdmin = functions.https.onCall(async (data, ctx) => {
   if (ctx.auth.token.admin) {
     try {
       await admin.auth().deleteUser(data.uid);
@@ -176,10 +176,62 @@ exports.deleteUser = functions.https.onCall(async (data, ctx) => {
   }
 });
 
+exports.deleteUserByAdmin = functions.https.onCall(async (data, ctx) => {
+  if (ctx.auth.token.admin) {
+    try {
+      await admin.auth().deleteUser(data.uid);
+      await admin
+        .firestore()
+        .collection("users")
+        .doc(data.uid)
+        .delete();
+      return {
+        success: true,
+        message: "User successfully deleted"
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.message
+      };
+    }
+  } else {
+    return {
+      success: false,
+      message: "Permission denined"
+    };
+  }
+});
+
 exports.updateProfile = functions.https.onCall(async (data, ctx) => {
   if (ctx.auth.token.admin || ctx.auth.token.moderator) {
     try {
       const record = await admin.auth().updateUser(ctx.auth.uid, data);
+
+      return {
+        success: true,
+        message: "User successfully updated",
+        record
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.message
+      };
+    }
+  } else {
+    return {
+      success: false,
+      message: "Permission denined"
+    };
+  }
+});
+
+
+exports.updateUserProfileByAdmin = functions.https.onCall(async (data, ctx) => {
+  if (ctx.auth.token.admin || ctx.auth.token.moderator) {
+    try {
+      const record = await admin.auth().updateUser(data.uid, data);
 
       return {
         success: true,
