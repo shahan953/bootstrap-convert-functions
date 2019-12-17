@@ -1,13 +1,13 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const serviceAccount = require("../service-account.json");
+// const serviceAccount = require("../service-account.json");
 const express = require("express");
 const app = express();
-const cors = require('cors');
-const bodyParser = require('body-parser');
+const cors = require("cors");
+const bodyParser = require("body-parser");
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  // credential: admin.credential.cert(serviceAccount)
 });
 
 exports.createFirstAdmin = functions.https.onRequest(async (req, res) => {
@@ -84,8 +84,6 @@ exports.createAdmin = functions.https.onCall(async (data, ctx) => {
         displayName: data.displayName
       });
       await admin.auth().setCustomUserClaims(record.uid, { [data.role]: true });
-      // record.admin = "admin";
-      // console.log(record.uid)
       await admin
         .firestore()
         .collection("admin")
@@ -94,9 +92,8 @@ exports.createAdmin = functions.https.onCall(async (data, ctx) => {
           email: data.email,
           [data.role]: true,
           displayName: data.displayName
-        }).then(res=>{
-          console.log('respnse',res)
-        }).catch(err=>console.log('error',err))
+        });
+
       return {
         success: true,
         message: `Sucess! ${data.email} has been made an ${data.role}`
@@ -178,18 +175,17 @@ exports.deleteAdmin = functions.https.onCall(async (data, ctx) => {
   }
 });
 
-
 exports.deleteUserByAdmin = functions.https.onCall(async (data, ctx) => {
   if (ctx.auth.token.admin) {
     try {
-      console.log(data)
+      console.log(data);
       await admin.auth().deleteUser(data.uid);
       await admin
         .firestore()
         .collection("users")
         .doc(data.uid)
         .delete();
-        console.log('sucess')
+      console.log("sucess");
       return {
         success: true,
         message: "User successfully deleted"
@@ -232,12 +228,11 @@ exports.updateProfile = functions.https.onCall(async (data, ctx) => {
   }
 });
 
-
 exports.updateUserProfileByAdmin = functions.https.onCall(async (data, ctx) => {
   if (ctx.auth.token.admin || ctx.auth.token.moderator) {
     // console.log(data.id)
-    const {id} = data
-    delete data.id
+    const { id } = data;
+    delete data.id;
     try {
       const record = await admin.auth().updateUser(id, data);
       return {
@@ -314,13 +309,12 @@ exports.updateContact = functions.https.onCall(async (data, ctx) => {
   }
 });
 
-
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.get("/helloworld", (req, res) => {
   console.log("hello");
-  
+
   res.json({
     ins: JSON.parse(admin.getToken())
   });
@@ -333,16 +327,16 @@ exports.testApi = functions.https.onCall(async (data, ctx) => {
   //     message: `${req.method} method not allowed`
   //   });
   // }
- try {
+  try {
     return {
       message: "OK",
       auth: ctx.auth.token
     };
- } catch (err) {
-   return {
-     message: err.message
-   }
- }
+  } catch (err) {
+    return {
+      message: err.message
+    };
+  }
 });
 
 exports.api = functions.https.onRequest(app);
