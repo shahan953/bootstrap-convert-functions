@@ -1,13 +1,13 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-// const serviceAccount = require("../service-account.json");
+const serviceAccount = require("../service-account.json");
 const express = require("express");
 const app = express();
 const cors = require("cors");
 const bodyParser = require("body-parser");
 
 admin.initializeApp({
-  // credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount)
 });
 
 exports.createFirstAdmin = functions.https.onRequest(async (req, res) => {
@@ -74,7 +74,9 @@ exports.createAdmin = functions.https.onCall(async (data, ctx) => {
       });
       return {
         success: true,
-        message: `Sucess! ${data.email} has been made an admin`
+        message: `Sucess! ${data.email} has been made an ${data.role}`,
+        isNew: false,
+        user
       };
     } else {
       const record = await admin.auth().createUser({
@@ -84,19 +86,21 @@ exports.createAdmin = functions.https.onCall(async (data, ctx) => {
         displayName: data.displayName
       });
       await admin.auth().setCustomUserClaims(record.uid, { [data.role]: true });
-      await admin
-        .firestore()
-        .collection("admin")
-        .doc(record.uid)
-        .set({
-          email: data.email,
-          [data.role]: true,
-          displayName: data.displayName
-        });
+      // await admin
+      //   .firestore()
+      //   .collection("admin")
+      //   .doc(record.uid)
+      //   .set({
+      //     email: data.email,
+      //     [data.role]: true,
+      //     displayName: data.displayName
+      //   });
 
       return {
         success: true,
-        message: `Sucess! ${data.email} has been made an ${data.role}`
+        message: `Sucess! ${data.email} has been made an ${data.role}!`,
+        isNew: true,
+        user: record
       };
     }
   } catch (err) {
@@ -152,11 +156,11 @@ exports.deleteAdmin = functions.https.onCall(async (data, ctx) => {
   if (ctx.auth.token.admin) {
     try {
       await admin.auth().deleteUser(data.uid);
-      await admin
-        .firestore()
-        .collection("admin")
-        .doc(data.uid)
-        .delete();
+      // await admin
+      //   .firestore()
+      //   .collection("admin")
+      //   .doc(data.uid)
+      //   .delete();
       return {
         success: true,
         message: "User successfully deleted"
@@ -178,14 +182,7 @@ exports.deleteAdmin = functions.https.onCall(async (data, ctx) => {
 exports.deleteUserByAdmin = functions.https.onCall(async (data, ctx) => {
   if (ctx.auth.token.admin) {
     try {
-      console.log(data);
       await admin.auth().deleteUser(data.uid);
-      await admin
-        .firestore()
-        .collection("users")
-        .doc(data.uid)
-        .delete();
-      console.log("sucess");
       return {
         success: true,
         message: "User successfully deleted"
