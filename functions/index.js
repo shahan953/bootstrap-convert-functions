@@ -85,6 +85,7 @@ exports.createAdmin = functions.https.onCall(async (data, ctx) => {
       });
       await admin.auth().setCustomUserClaims(record.uid, { [data.role]: true });
       // record.admin = "admin";
+      // console.log(record.uid)
       await admin
         .firestore()
         .collection("admin")
@@ -93,8 +94,9 @@ exports.createAdmin = functions.https.onCall(async (data, ctx) => {
           email: data.email,
           [data.role]: true,
           displayName: data.displayName
-        });
-
+        }).then(res=>{
+          console.log('respnse',res)
+        }).catch(err=>console.log('error',err))
       return {
         success: true,
         message: `Sucess! ${data.email} has been made an ${data.role}`
@@ -176,15 +178,18 @@ exports.deleteAdmin = functions.https.onCall(async (data, ctx) => {
   }
 });
 
+
 exports.deleteUserByAdmin = functions.https.onCall(async (data, ctx) => {
   if (ctx.auth.token.admin) {
     try {
+      console.log(data)
       await admin.auth().deleteUser(data.uid);
       await admin
         .firestore()
         .collection("users")
         .doc(data.uid)
         .delete();
+        console.log('sucess')
       return {
         success: true,
         message: "User successfully deleted"
@@ -230,9 +235,11 @@ exports.updateProfile = functions.https.onCall(async (data, ctx) => {
 
 exports.updateUserProfileByAdmin = functions.https.onCall(async (data, ctx) => {
   if (ctx.auth.token.admin || ctx.auth.token.moderator) {
+    // console.log(data.id)
+    const {id} = data
+    delete data.id
     try {
-      const record = await admin.auth().updateUser(data.uid, data);
-
+      const record = await admin.auth().updateUser(id, data);
       return {
         success: true,
         message: "User successfully updated",
