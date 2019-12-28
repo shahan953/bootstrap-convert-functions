@@ -1,13 +1,93 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const serviceAccount = require("../service-account.json");
+// const serviceAccount = require("../service-account.json");
 const express = require("express");
 const app = express();
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const stripeConfig = require("stripe");
+
+let stripe;
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  // credential: admin.credential.cert(serviceAccount)
+});
+//  string: {:id=>"tok_1FuknuFO3ZsfpXRKgQecqE7N", :object=>"token", :card=>{:id=>"card_1FukntFO3ZsfpXRKAB2AJQBt", :object=>"card", :address_city=>"", :address_country=>"", :address_line1=>"", :address_line1_check=>"", :address_line2=>"", :address_state=>"", :address_zip=>"12121", :address_zip_check=>"unchecked", :brand=>"Visa", :country=>"US", :cvc_check=>"unchecked", :dynamic_last4=>"", :exp_month=>"4", :exp_year=>"2024", :funding=>"credit", :last4=>"4242", :name=>"Shahan Chowdhury", :tokenization_method=>""}, :client_ip=>"118.179.127.200", :created=>"1577560706", :livemode=>"false", :type=>"card", :used=>"false"}
+exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
+  const paymentRef = admin.firestore().collection("payments");
+  const projectRef = admin.firestore().collection("projects");
+  const paymentId = paymentRef.doc().id;
+  try {
+    const record = await admin
+      .firestore()
+      .collection("settings")
+      .doc("payment")
+      .get();
+    const { stripeSecret, testSecretKey, testApiEnabled } = record.data();
+    console.log(stripeSecret, testSecretKey, testApiEnabled)
+    if (testApiEnabled) {
+      stripe = stripeConfig(testSecretKey);
+    } else {
+      stripe = stripeConfig(stripeSecret);
+    }
+
+    const { email, uid } = ctx.auth.token;
+    const { token, amount, description, projectId } = data;
+    console.log(token, amount, description, projectId)
+
+    if(!amount || amount <= 0) {
+      return {
+        success: false,
+        message: "Invalid amount"
+      }
+    }
+
+    const customer = await stripe.customers.create({
+      email: email,
+      source: token.id
+    });
+
+    const charge = await stripe.charges.create(
+      {
+        amount: 100 * amount.toFixed(2),
+        currency: "usd",
+        description: description,
+        customer: customer.id,
+        receipt_email: email,
+        // source: token.id,
+        metadata:{
+          project_id:projectId
+        }
+      },
+      {
+        idempotency_key: paymentId
+      }
+    );
+
+    if(charge.status === 'succeeded') {
+      paymentRef.doc(paymentId).set({
+        projectId,
+        userId: uid,
+        charge
+      })
+
+      projectRef.doc(projectId).update({
+        status: "In progress"
+      })
+    }
+      
+
+    return {
+      success: true,
+      message: "Payment successfull"
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err,
+      message: err.message
+    };
+  }
 });
 
 exports.createFirstAdmin = functions.https.onRequest(async (req, res) => {
