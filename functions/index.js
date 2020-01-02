@@ -24,7 +24,7 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
       .doc("payment")
       .get();
     const { stripeSecret, testSecretKey, testApiEnabled } = record.data();
-    console.log(stripeSecret, testSecretKey, testApiEnabled)
+    // console.log(stripeSecret, testSecretKey, testApiEnabled);
     if (testApiEnabled) {
       stripe = stripeConfig(testSecretKey);
     } else {
@@ -32,14 +32,13 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
     }
 
     const { email, uid } = ctx.auth.token;
-    const { token, amount, description, projectId } = data;
-    console.log(token, amount, description, projectId)
+    const { token, amount, description, projectId, modificationId } = data;
 
-    if(!amount || amount <= 0) {
+    if (!amount || amount <= 0) {
       return {
         success: false,
         message: "Invalid amount"
-      }
+      };
     }
 
     const customer = await stripe.customers.create({
@@ -55,8 +54,8 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
         customer: customer.id,
         receipt_email: email,
         // source: token.id,
-        metadata:{
-          project_id:projectId
+        metadata: {
+          projectId
         }
       },
       {
@@ -64,18 +63,44 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
       }
     );
 
-    if(charge.status === 'succeeded') {
+    console.log(projectId);
+
+    const record2 = await admin
+      .firestore()
+      .collection("projects")
+      .doc(projectId)
+      .get();
+
+    const project = record2.data();
+
+    if (charge.status === "succeeded") {
+      let modification = project.modification.find(
+        item => String(item.createdAt) === String(modificationId) && item
+      );
+      // project.modification.forEach(mod => {
+      //   return modifications.push({
+      //     ...mod,
+      //     status: String(mod.createdAt) === String(modificationId) ? "In Progress" : mod.status
+      //   });
+      // });
+      if (modification) modification.status = "In Progress";
+
+      if (project.status.toLowerCase() === "waiting payment" && !modificationId)
+        project.status = "In Progress";
+
+      projectRef.doc(projectId).update(project);
+      console.log(modification)
       paymentRef.doc(paymentId).set({
-        projectId,
+        project: {
+          name: project.name,
+          id: project.id
+        },
+        projectId: project.id,
+        modification: modification ? modification : false,
         userId: uid,
         charge
-      })
-
-      projectRef.doc(projectId).update({
-        status: "In progress"
-      })
+      });
     }
-      
 
     return {
       success: true,
