@@ -12,7 +12,7 @@ let stripe;
 admin.initializeApp({
   // credential: admin.credential.cert(serviceAccount)
 });
-//  string: {:id=>"tok_1FuknuFO3ZsfpXRKgQecqE7N", :object=>"token", :card=>{:id=>"card_1FukntFO3ZsfpXRKAB2AJQBt", :object=>"card", :address_city=>"", :address_country=>"", :address_line1=>"", :address_line1_check=>"", :address_line2=>"", :address_state=>"", :address_zip=>"12121", :address_zip_check=>"unchecked", :brand=>"Visa", :country=>"US", :cvc_check=>"unchecked", :dynamic_last4=>"", :exp_month=>"4", :exp_year=>"2024", :funding=>"credit", :last4=>"4242", :name=>"Shahan Chowdhury", :tokenization_method=>""}, :client_ip=>"118.179.127.200", :created=>"1577560706", :livemode=>"false", :type=>"card", :used=>"false"}
+
 exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
   const paymentRef = admin.firestore().collection("payments");
   const projectRef = admin.firestore().collection("projects");
@@ -24,7 +24,7 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
       .doc("payment")
       .get();
     const { stripeSecret, testSecretKey, testApiEnabled } = record.data();
-    // console.log(stripeSecret, testSecretKey, testApiEnabled);
+    
     if (testApiEnabled) {
       stripe = stripeConfig(testSecretKey);
     } else {
@@ -53,7 +53,6 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
         description: description,
         customer: customer.id,
         receipt_email: email,
-        // source: token.id,
         metadata: {
           projectId
         }
@@ -63,11 +62,7 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
       }
     );
 
-    console.log(projectId);
-
-    const record2 = await admin
-      .firestore()
-      .collection("projects")
+    const record2 = await projectRef
       .doc(projectId)
       .get();
 
@@ -77,20 +72,13 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
       let modification = project.modification.find(
         item => String(item.createdAt) === String(modificationId) && item
       );
-      // project.modification.forEach(mod => {
-      //   return modifications.push({
-      //     ...mod,
-      //     status: String(mod.createdAt) === String(modificationId) ? "In Progress" : mod.status
-      //   });
-      // });
+
       if (modification) modification.status = "In Progress";
 
-      if (project.status.toLowerCase() === "waiting payment" && !modificationId)
-        project.status = "In Progress";
+      if (project.status.toLowerCase() === "waiting payment" && !modificationId) project.status = "In Progress";
 
-      projectRef.doc(projectId).update(project);
-      console.log(modification)
-      paymentRef.doc(paymentId).set({
+      await projectRef.doc(projectId).update(project);
+      await paymentRef.doc(paymentId).set({
         project: {
           name: project.name,
           id: project.id
@@ -191,15 +179,15 @@ exports.createAdmin = functions.https.onCall(async (data, ctx) => {
         displayName: data.displayName
       });
       await admin.auth().setCustomUserClaims(record.uid, { [data.role]: true });
-      // await admin
-      //   .firestore()
-      //   .collection("admin")
-      //   .doc(record.uid)
-      //   .set({
-      //     email: data.email,
-      //     [data.role]: true,
-      //     displayName: data.displayName
-      //   });
+      await admin
+        .firestore()
+        .collection("admin")
+        .doc(record.uid)
+        .set({
+          email: data.email,
+          [data.role]: true,
+          displayName: data.displayName
+        });
 
       return {
         success: true,
@@ -411,16 +399,16 @@ exports.updateContact = functions.https.onCall(async (data, ctx) => {
   }
 });
 
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-app.get("/helloworld", (req, res) => {
-  console.log("hello");
+// app.use(cors());
+// app.use(bodyParser.json());
+// app.use(bodyParser.urlencoded({ extended: true }));
+// app.get("/helloworld", (req, res) => {
+//   console.log("hello");
 
-  res.json({
-    ins: JSON.parse(admin.getToken())
-  });
-});
+//   res.json({
+//     ins: JSON.parse(admin.getToken())
+//   });
+// });
 
 exports.testApi = functions.https.onCall(async (data, ctx) => {
   // console.log(req.headers.autorization);
