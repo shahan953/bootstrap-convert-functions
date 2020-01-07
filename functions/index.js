@@ -3,8 +3,6 @@ const admin = require("firebase-admin");
 // const serviceAccount = require("../service-account.json");
 const express = require("express");
 const app = express();
-const cors = require("cors");
-const bodyParser = require("body-parser");
 const stripeConfig = require("stripe");
 
 let stripe;
@@ -14,9 +12,14 @@ admin.initializeApp({
 });
 
 exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
+  const { token, amount, description, projectId, modificationId } = data;
   const paymentRef = admin.firestore().collection("payments");
   const projectRef = admin.firestore().collection("projects");
+  const userRef = admin.firestore().collection("users");
   const paymentId = paymentRef.doc().id;
+
+  const record2 = await projectRef.doc(projectId).get();
+
   try {
     const record = await admin
       .firestore()
@@ -24,7 +27,10 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
       .doc("payment")
       .get();
     const { stripeSecret, testSecretKey, testApiEnabled } = record.data();
-    
+    const project = record2.data();
+
+    const userData = await userRef.doc(project.uid).get();
+
     if (testApiEnabled) {
       stripe = stripeConfig(testSecretKey);
     } else {
@@ -32,9 +38,18 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
     }
 
     const { email, uid } = ctx.auth.token;
-    const { token, amount, description, projectId, modificationId } = data;
+    let modification = project.modification.find(
+      item => String(item.createdAt) === String(modificationId) && item
+    );
+    let totalPayable = 0;
 
-    if (!amount || amount <= 0) {
+    if (modificationId && modification) {
+      totalPayable = parseFloat(modification.price);
+    } else {
+      totalPayable = parseFloat(project.price);
+    }
+
+    if (!totalPayable || totalPayable <= 0) {
       return {
         success: false,
         message: "Invalid amount"
@@ -48,13 +63,23 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
 
     const charge = await stripe.charges.create(
       {
-        amount: 100 * amount.toFixed(2),
+        amount: 100 * totalPayable.toFixed(2),
         currency: "usd",
         description: description,
         customer: customer.id,
         receipt_email: email,
         metadata: {
           projectId
+        },
+        shipping: {
+          name: token.card.name,
+          address: {
+            line1: userData ? userData.address : "",
+            line2: userData ? userData.address : "",
+            state: userData ? userData.state : "",
+            city: userData ? userData.city : "",
+            country: userData ? userData.country : ""
+          }
         }
       },
       {
@@ -62,20 +87,11 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
       }
     );
 
-    const record2 = await projectRef
-      .doc(projectId)
-      .get();
-
-    const project = record2.data();
-
     if (charge.status === "succeeded") {
-      let modification = project.modification.find(
-        item => String(item.createdAt) === String(modificationId) && item
-      );
+      if (modification && modificationId) modification.status = "In Progress";
 
-      if (modification) modification.status = "In Progress";
-
-      if (project.status.toLowerCase() === "waiting payment" && !modificationId) project.status = "In Progress";
+      if (project.status.toLowerCase() === "waiting payment" && !modificationId)
+        project.status = "In Progress";
 
       await projectRef.doc(projectId).update(project);
       await paymentRef.doc(paymentId).set({
