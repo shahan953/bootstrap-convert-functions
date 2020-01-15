@@ -12,7 +12,7 @@ admin.initializeApp({
 });
 
 exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
-  const { token, amount, description, projectId, modificationId } = data;
+  const { token, description, projectId, modificationId } = data;
   const paymentRef = admin.firestore().collection("payments");
   const projectRef = admin.firestore().collection("projects");
   const userRef = admin.firestore().collection("users");
@@ -30,6 +30,8 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
     const project = record2.data();
 
     const userData = await userRef.doc(project.uid).get();
+    const user = userData ? userData.data() : {};
+    // console.log(user);
 
     if (testApiEnabled) {
       stripe = stripeConfig(testSecretKey);
@@ -74,11 +76,11 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
         shipping: {
           name: token.card.name,
           address: {
-            line1: userData ? userData.address : "",
-            line2: userData ? userData.address : "",
-            state: userData ? userData.state : "",
-            city: userData ? userData.city : "",
-            country: userData ? userData.country : ""
+            line1: user.address || "",
+            line2: user.address || "",
+            state: user.state || "",
+            city: user.city || "",
+            country: user.country || ""
           }
         }
       },
@@ -108,7 +110,8 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
 
     return {
       success: true,
-      message: "Payment successfull"
+      message: "Payment successfull",
+      charge
     };
   } catch (err) {
     return {
@@ -411,36 +414,6 @@ exports.updateContact = functions.https.onCall(async (data, ctx) => {
     return {
       success: false,
       message: "Permission denined"
-    };
-  }
-});
-
-// app.use(cors());
-// app.use(bodyParser.json());
-// app.use(bodyParser.urlencoded({ extended: true }));
-// app.get("/helloworld", (req, res) => {
-//   console.log("hello");
-
-//   res.json({
-//     ins: JSON.parse(admin.getToken())
-//   });
-// });
-
-exports.testApi = functions.https.onCall(async (data, ctx) => {
-  // console.log(req.headers.autorization);
-  // if (req.method !== "POST") {
-  //   return res.status(404).json({
-  //     message: `${req.method} method not allowed`
-  //   });
-  // }
-  try {
-    return {
-      message: "OK",
-      auth: ctx.auth.token
-    };
-  } catch (err) {
-    return {
-      message: err.message
     };
   }
 });
