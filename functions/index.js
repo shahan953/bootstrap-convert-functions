@@ -1,15 +1,63 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-// const serviceAccount = require("../service-account.json");
+
+var serviceAccount = require("../functions/service.json");
 const express = require("express");
+const emailtemp = require("./emailtemplate.js");
 const app = express();
 const stripeConfig = require("stripe");
-
+const nodemailer = require("nodemailer");
 let stripe;
 
-admin.initializeApp({
-  // credential: admin.credential.cert(serviceAccount)
+let transport = nodemailer.createTransport({
+  host: "smtp.mailtrap.io",
+  port: 2525,
+  auth: {
+    user: "0134a53a2f25bf",
+    pass: "48cc1d3b2c8d70"
+  }
 });
+
+//admin.initializeApp(functions.config().firebase);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+//----------Email Notification--------------//
+exports.emailNotification = functions.https.onCall(async (data, ctx) => {
+  const { projectId } = data;
+  var record = await admin
+    .firestore()
+    .collection("projects")
+    .doc(projectId)
+    .get();
+
+  var etemp = await emailtemp.getEmailTemplate(record.data().status);
+
+  const message = {
+    from: "elonmusk@tesla.com",
+    to: "shuvojit.kar1@gmail.com",
+    subject: etemp.subject,
+    html: `<b> ${etemp.subject}</b><br><br>  ${etemp.msg}`
+  };
+  await transport.sendMail(message);
+
+  try {
+    return {
+      success: true,
+      message: "notification Sent"
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err,
+      message: err.message
+    };
+  }
+});
+
+//----------Email Notification--------------//
 
 exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
   const { token, amount, description, projectId, modificationId } = data;
