@@ -1,15 +1,113 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-// const serviceAccount = require("../service-account.json");
+
+var serviceAccount = require("../functions/service.json");
 const express = require("express");
+const emailtemp = require("./emailtemplate");
 const app = express();
 const stripeConfig = require("stripe");
-
+const nodemailer = require("nodemailer");
 let stripe;
 
-admin.initializeApp({
-  // credential: admin.credential.cert(serviceAccount)
+let transport = nodemailer.createTransport({
+  host: "smtp.live.com",
+  port: 465,
+  secure: true,
+  auth: {
+    user: "sitesbelem@hotmail.com",
+    pass: "maximo11994"
+  }
 });
+
+// let transport = nodemailer.createTransport({
+//   host: "smtp.mailtrap.io",
+//   port: 2525,
+//   auth: {
+//     user: "fe42209a9f7a0e",
+//     pass: "e89776082391bf"
+//   }
+// });
+
+//admin.initializeApp(functions.config().firebase);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+//----------Email Notification--------------//
+// exports.onProjectStatusChange = functions.firestore
+//   .document("projects/{projectsId}")
+//   .onWrite(async (change, ctx) => {
+//     const newDocument = change.after.exists ? change.after.data() : {};
+//     const oldDocument = change.before.exists ? change.before.data() : {};
+
+//     if (oldDocument.status === newDocument.status) {
+//       return null;
+//     }
+
+//     var etemp = await emailtemp.getProjectTemplate(newDocument);
+
+//     if (etemp) {
+//       const message = {
+//         from: "help@designconvert.io",
+//         to: newDocument.meta.user.email,
+//         subject: etemp.subject,
+//         html: `<b> ${etemp.subject}</b><br><br>  ${etemp.msg}`
+//       };
+
+//       try {
+//         const sendMail = await transport.sendMail(message);
+//         console.log(sendMail);
+//         return sendMail;
+//       } catch (err) {
+//         return null;
+//       }
+//     } else {
+//       return null;
+//     }
+//   });
+
+//----------Email Notification--------------//
+exports.sendProjectEmail = functions.https.onCall(async (data, ctx) => {
+  const { project } = data;
+
+  console.log(project);
+
+  var etemp = await emailtemp.getProjectTemplate(project);
+
+  if (etemp) {
+    const message = {
+      from: "sitesbelem@hotmail.com",
+      to: project.meta.user.email,
+      subject: etemp.subject,
+      html: `<b> ${etemp.subject}</b><br><br>  ${etemp.msg}`
+    };
+
+    console.log(message);
+
+    try {
+      const sendMail = await transport.sendMail(message);
+      console.log(sendMail);
+      return {
+        code: "SUCCESS",
+        message: "Email successfully sent"
+      };
+    } catch (err) {
+      console.log(err);
+      return {
+        code: "FAILED",
+        message: "Cannot send email"
+      };
+    }
+  } else {
+    return {
+      code: "FAILED",
+      message: "Cannot send email"
+    };
+  }
+});
+
+//----------Email Notification--------------//
 
 exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
   const { token, description, projectId, modificationId } = data;
