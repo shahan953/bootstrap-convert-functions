@@ -1,7 +1,7 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
-var serviceAccount = require("../functions/service.json");
+var serviceAccount = require("./service.js");
 const express = require("express");
 const emailtemp = require("./emailtemplate");
 const app = express();
@@ -9,13 +9,27 @@ const stripeConfig = require("stripe");
 const nodemailer = require("nodemailer");
 let stripe;
 
-let transport = nodemailer.createTransport({
-  host: "smtp.live.com",
-  port: 465,
-  secure: true,
+// console.log(serviceAccount)
+
+// let transport = nodemailer.createTransport({
+//   host: "smtp.live.com",
+//   port: 465,
+//   secure: true,
+//   auth: {
+//     user: "sitesbelem@hotmail.com",
+//     pass: "maximo11994"
+//   }
+// });
+
+const transport = nodemailer.createTransport({
+  service: "yandex",
   auth: {
-    user: "sitesbelem@hotmail.com",
-    pass: "maximo11994"
+    user: "emon@consoleit.io",
+    pass: "3m0nd4r0ck"
+  },
+  tls: {
+    // do not fail on invalid certs
+    rejectUnauthorized: false
   }
 });
 
@@ -67,52 +81,154 @@ admin.initializeApp({
 //     }
 //   });
 
-//----------Email Notification--------------//
-exports.sendProjectEmail = functions.https.onCall(async (data, ctx) => {
-  const { project } = data;
+exports.onProjectStatusChange = functions.firestore
+  .document("projects/{projectsId}")
+  .onWrite(async (change, ctx) => {
+    const newDocument = change.after.exists ? change.after.data() : {};
+    const oldDocument = change.before.exists ? change.before.data() : {};
 
-  console.log(project);
-
-  var etemp = await emailtemp.getProjectTemplate(project);
-
-  if (etemp) {
-    const message = {
-      from: "sitesbelem@hotmail.com",
-      to: project.meta.user.email,
-      subject: etemp.subject,
-      html: `<b> ${etemp.subject}</b><br><br>  ${etemp.msg}`
-    };
-
-    console.log(message);
-
-    try {
-      const sendMail = await transport.sendMail(message);
-      console.log(sendMail);
-      return {
-        code: "SUCCESS",
-        message: "Email successfully sent"
-      };
-    } catch (err) {
-      console.log(err);
-      return {
-        code: "FAILED",
-        message: "Cannot send email"
-      };
+    if (oldDocument.status === newDocument.status) {
+      return null;
     }
-  } else {
-    return {
-      code: "FAILED",
-      message: "Cannot send email"
-    };
-  }
-});
+
+    var etemp = await emailtemp.getProjectTemplate(newDocument);
+
+    if (etemp) {
+      const message = {
+        from: "help@designconvert.io",
+        to: newDocument.meta.user.email,
+        subject: etemp.subject,
+        html: `<b> ${etemp.subject}</b><br><br>  ${etemp.msg}`
+      };
+
+      try {
+        const sendMail = await transport.sendMail(message);
+        console.log(sendMail);
+        return sendMail;
+      } catch (err) {
+        return null;
+      }
+    } else {
+      return null;
+    }
+  });
+
+// exports.onModificationStatusChange = functions.firestore
+//   .document("modifications/{modificationId}")
+//   .onWrite(async (change, ctx) => {
+//     const newDocument = change.after.exists ? change.after.data() : {};
+//     const oldDocument = change.before.exists ? change.before.data() : {};
+
+//     if (
+//       !newDocument.uid &&
+//       !ctx.auth.token.admin &&
+//       !ctx.auth.token.moderator
+//     ) {
+//       try {
+//         await admin
+//           .firestore()
+//           .collection("modifications")
+//           .doc(ctx.params.modificationId)
+//           .update({
+//             uid: ctx.auth.uid
+//           });
+//       } catch (error) {
+//         console.log(error);
+//         return null;
+//       }
+//     }
+
+//     if (oldDocument.status === newDocument.status) {
+//       return null;
+//     }
+
+//     var etemp = await emailtemp.getEmailTemplateForModification(newDocument);
+
+//     // if (etemp) {
+//     //   const message = {
+//     //     from: "help@designconvert.io",
+//     //     to: newDocument.meta.user.email,
+//     //     subject: etemp.subject,
+//     //     html: `<b> ${etemp.subject}</b><br><br>  ${etemp.msg}`
+//     //   };
+
+//     //   try {
+//     //     const sendMail = await transport.sendMail(message);
+//     //     console.log(sendMail);
+//     //     return sendMail;
+//     //   } catch (err) {
+//     //     return null;
+//     //   }
+//     // } else {
+//     //   return null;
+//     // }
+//   });
+
+exports.idVerification = functions.firestore
+  .document("verification/{verificationId}")
+  .onCreate((snap, ctx) => {
+    console.log("Hello how are you?");
+    // const data = snap.data();
+    console.log(data);
+    // await admin
+    //   .auth()
+    //   .setCustomUserClaims(ctx.auth.uid, { identication: data.id });
+    console.log(ctx.auth.uid, ctx.params);
+    // return admin
+    //   .firestore()
+    //   .collection("users")
+    //   .doc(ctx.auth.uid)
+    //   .update({
+    //     identication: ctx.params.verificationId
+    //   });
+  });
 
 //----------Email Notification--------------//
+// exports.sendProjectEmail = functions.https.onCall(async (data, ctx) => {
+//   const { project } = data;
 
+//   console.log(project);
+
+//   var etemp = await emailtemp.getProjectTemplate(project);
+
+//   if (etemp) {
+//     const message = {
+//       from: "sitesbelem@hotmail.com",
+//       to: project.meta.user.email,
+//       subject: etemp.subject,
+//       html: `<b> ${etemp.subject}</b><br><br>  ${etemp.msg}`
+//     };
+
+//     console.log(message);
+
+//     try {
+//       const sendMail = await transport.sendMail(message);
+//       console.log(sendMail);
+//       return {
+//         code: "SUCCESS",
+//         message: "Email successfully sent"
+//       };
+//     } catch (err) {
+//       console.log(err);
+//       return {
+//         code: "FAILED",
+//         message: "Cannot send email"
+//       };
+//     }
+//   } else {
+//     return {
+//       code: "FAILED",
+//       message: "Cannot send email"
+//     };
+//   }
+// });
+
+//----------Email Notification--------------//
 exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
   const { token, description, projectId, modificationId } = data;
   const paymentRef = admin.firestore().collection("payments");
   const projectRef = admin.firestore().collection("projects");
+  const modificationRef = admin.firestore().collection("modifications");
   const userRef = admin.firestore().collection("users");
   const paymentId = paymentRef.doc().id;
 
@@ -127,6 +243,7 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
     const { stripeSecret, testSecretKey, testApiEnabled } = record.data();
     const project = record2.data();
 
+
     const userData = await userRef.doc(project.uid).get();
     const user = userData ? userData.data() : {};
     // console.log(user);
@@ -138,12 +255,18 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
     }
 
     const { email, uid } = ctx.auth.token;
-    let modification = project.modification.find(
-      item => String(item.createdAt) === String(modificationId) && item
-    );
+
+    // let modification = project.modification.find(
+    //   item => String(item.createdAt) === String(modificationId) && item
+    // );
+
+    let modification = {};
+
     let totalPayable = 0;
 
-    if (modificationId && modification) {
+    if (modificationId) {
+      let result3 = await modificationRef.doc(modificationId).get();
+      modification = result3 ? result3.data() : {};
       totalPayable = parseFloat(modification.price);
     } else {
       totalPayable = parseFloat(project.price);
@@ -186,6 +309,14 @@ exports.stripeCharge = functions.https.onCall(async (data, ctx) => {
         idempotency_key: paymentId
       }
     );
+
+    await stripe.invoices.create({ customer: customer.id }, (err, invoice) => {
+      if (err) {
+        console.log(err);
+      } else {
+        console.log("Inoice", invoice);
+      }
+    });
 
     if (charge.status === "succeeded") {
       if (modification && modificationId) modification.status = "In Progress";
@@ -435,9 +566,35 @@ exports.updateProfile = functions.https.onCall(async (data, ctx) => {
   }
 });
 
+exports.updateMyProfile = functions.https.onCall(async (data, ctx) => {
+  if (ctx.auth.token) {
+    const { id } = data;
+    delete data.id;
+    try {
+      const record = await admin.auth().updateUser(ctx.auth.uid, data);
+      return {
+        success: true,
+        message: "User successfully updated",
+        record
+      };
+    } catch (err) {
+      console.log(err);
+      return {
+        success: false,
+        message: err.message
+      };
+    }
+  } else {
+    return {
+      success: false,
+      message: "Unauthorize"
+    };
+  }
+});
+
 exports.updateUserProfileByAdmin = functions.https.onCall(async (data, ctx) => {
   if (ctx.auth.token.admin || ctx.auth.token.moderator) {
-    // console.log(data.id)
+    console.log(data.id);
     const { id } = data;
     delete data.id;
     try {
